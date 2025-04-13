@@ -70,7 +70,7 @@ def resize_if_large(frame, max_resolution=1000):
         return cv2.resize(frame, (new_width, new_height))
     return frame
 
-def process_video(input_path, output_path, window_size=3, min_quality=0.01):
+def process_video(input_path, output_path, window_size=3, min_quality=0.01, peak_threshold_ratio=0.865):
     start_time = time.time()
     
     # Create output directories
@@ -164,34 +164,40 @@ def process_video(input_path, output_path, window_size=3, min_quality=0.01):
     out.release()
     cv2.destroyAllWindows()
     
-    # Select the top 10 peaks with minimum interval
-    selected_peaks = select_peaks(potential_peaks, min_peak_interval, top_n=10)
+    # Calculate maximum difference and threshold
+    max_difference = max([d[0] for d in potential_peaks]) if potential_peaks else 0
+    threshold = max_difference * peak_threshold_ratio
+    
+    # Select peaks based on threshold
+    selected_peaks = select_peaks_by_threshold(potential_peaks, threshold, min_peak_interval)
     
     # Calculate processing time
     processing_time = time.time() - start_time
     
+    # Get resolution information
+    original_resolution = (original_width, original_height)
+    processed_resolution = (width, height)
+    
     # Save outputs
-    save_selected_peaks(selected_peaks, diff_frames_dir, processing_time)
+    save_selected_peaks(selected_peaks, diff_frames_dir, processing_time, 
+                       original_resolution, processed_resolution, all_diffs, threshold, max_difference)
     save_all_differences(all_diffs, diff_frames_dir)
 
-def select_peaks(potential_peaks, min_interval, top_n=10):
-    """Seleciona os maiores picos com intervalo mínimo"""
-    potential_peaks.sort(reverse=True, key=lambda x: x[0])  # Sort by difference
+def select_peaks_by_threshold(potential_peaks, threshold, min_interval):
+    """Seleciona picos que excedem o threshold com intervalo mínimo"""
+    # Sort by timestamp first
+    potential_peaks.sort(key=lambda x: x[2])
+    
     selected = []
+    last_peak_time = -min_interval - 1  # Garante que o primeiro pico válido será aceito
     
     for peak in potential_peaks:
-        if len(selected) >= top_n:
-            break
-            
-        # Check if this peak is far enough from selected peaks
-        valid = True
-        for selected_peak in selected:
-            if abs(peak[2] - selected_peak[2]) < min_interval:
-                valid = False
-                break
-                
-        if valid:
+        diff, frame_num, timestamp, frame = peak
+        
+        # Verifica se excede o threshold e está fora do intervalo mínimo
+        if diff >= threshold and (timestamp - last_peak_time) >= min_interval:
             selected.append(peak)
+            last_peak_time = timestamp
     
     return selected
 
@@ -209,18 +215,10 @@ def calculate_frequencies(timestamps):
     
     return time_diffs, frequencies, avg_frequency
 
-def save_selected_peaks(selected_peaks, output_dir, processing_time):
+def save_selected_peaks(selected_peaks, output_dir, processing_time, original_resolution, processed_resolution, all_diffs, threshold, max_difference):
     """Salva os picos selecionados e calcula as frequências"""
-    if not selected_peaks:
-        print("Nenhum pico válido encontrado")
-        return
-    
-    # Sort peaks by timestamp
-    selected_peaks.sort(key=lambda x: x[2])
-    
-    # Calculate frequencies
-    timestamps = [peak[2] for peak in selected_peaks]
-    time_diffs, frequencies, avg_frequency = calculate_frequencies(timestamps)
+    # Calculate statistics
+    avg_difference = np.mean([diff[2] for diff in all_diffs]) if all_diffs else 0
     
     # Save peak frames
     for i, peak in enumerate(selected_peaks, 1):
@@ -229,34 +227,54 @@ def save_selected_peaks(selected_peaks, output_dir, processing_time):
     # Create metadata
     metadata = [
         f"Processamento concluído em: {processing_time:.2f} segundos",
-        f"Resolução original reduzida pela metade: {'Sim' if len(selected_peaks) > 0 and selected_peaks[0][3].shape[0] <= 500 else 'Não'}",
         "",
-        "Top 10 picos com intervalo mínimo de 300ms:",
-        "-----------------------------------------"
+        "Informações de Resolução:",
+        f"Resolução original: {original_resolution[0]}x{original_resolution[1]}",
+        f"Resolução processada: {processed_resolution[0]}x{processed_resolution[1]}",
+        f"Redimensionado: {'Sim' if original_resolution != processed_resolution else 'Não'}",
+        "",
+        "Configurações de Detecção:",
+        f"Média das diferenças: {avg_difference:.2f}",
+        f"Diferença máxima encontrada: {max_difference:.2f}",
+        f"Threshold (75% do máximo): {threshold:.2f}",
+        f"Intervalo mínimo entre picos: 1.0s",
+        "",
+        f"Total de picos detectados: {len(selected_peaks)}",
+        "--------------------------------------"
     ]
     
-    for i, peak in enumerate(selected_peaks, 1):
-        metadata.append(
-            f"Pico {i}: Frame {peak[1]} | Timestamp: {peak[2]:.3f}s | Diferença: {peak[0]:.2f}"
-        )
-    
-    metadata.extend([
-        "",
-        "Análise de Frequência:",
-        "---------------------"
-    ])
-    
-    for i in range(len(time_diffs)):
-        metadata.append(
-            f"Intervalo {i+1}: {time_diffs[i]:.3f}s | Frequência: {frequencies[i]:.3f}Hz"
-        )
-    
-    metadata.extend([
-        "",
-        f"Frequência média: {avg_frequency:.3f}Hz",
-        f"Frequência mínima: {min(frequencies):.3f}Hz" if frequencies else "N/A",
-        f"Frequência máxima: {max(frequencies):.3f}Hz" if frequencies else "N/A"
-    ])
+    if selected_peaks:
+        # Sort peaks by timestamp
+        selected_peaks.sort(key=lambda x: x[2])
+        
+        # Calculate frequencies
+        timestamps = [peak[2] for peak in selected_peaks]
+        time_diffs, frequencies, avg_frequency = calculate_frequencies(timestamps)
+        
+        for i, peak in enumerate(selected_peaks, 1):
+            metadata.append(
+                f"Pico {i}: Frame {peak[1]} | Timestamp: {peak[2]:.3f}s | Diferença: {peak[0]:.2f} ({peak[0]/max_difference*100:.1f}% do máximo)"
+            )
+        
+        metadata.extend([
+            "",
+            "Análise de Frequência:",
+            "---------------------"
+        ])
+        
+        for i in range(len(time_diffs)):
+            metadata.append(
+                f"Intervalo {i+1}: {time_diffs[i]:.3f}s | Frequência: {frequencies[i]:.3f}Hz"
+            )
+        
+        metadata.extend([
+            "",
+            f"Frequência média: {avg_frequency:.3f}Hz",
+            f"Frequência mínima: {min(frequencies):.3f}Hz" if frequencies else "N/A",
+            f"Frequência máxima: {max(frequencies):.3f}Hz" if frequencies else "N/A"
+        ])
+    else:
+        metadata.append("Nenhum pico significativo detectado (diferença ≥ 75% do valor máximo)")
     
     # Write metadata file
     metadata_path = os.path.join(output_dir, "metadata.txt")

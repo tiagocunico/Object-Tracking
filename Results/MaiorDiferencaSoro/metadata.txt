@@ -1,31 +1,31 @@
-Processamento concluído em: 34.98 segundos
-Resolução original reduzida pela metade: Sim
+Processamento concluído em: 138.38 segundos
 
-Top 10 picos com intervalo mínimo de 300ms:
------------------------------------------
-Pico 1: Frame 12 | Timestamp: 0.260s | Diferença: 59.00
-Pico 2: Frame 182 | Timestamp: 3.660s | Diferença: 158.00
-Pico 3: Frame 280 | Timestamp: 5.620s | Diferença: 61.00
-Pico 4: Frame 331 | Timestamp: 6.640s | Diferença: 62.00
-Pico 5: Frame 384 | Timestamp: 7.700s | Diferença: 49.00
-Pico 6: Frame 435 | Timestamp: 8.720s | Diferença: 66.00
-Pico 7: Frame 485 | Timestamp: 9.720s | Diferença: 49.00
-Pico 8: Frame 538 | Timestamp: 10.780s | Diferença: 52.00
-Pico 9: Frame 609 | Timestamp: 12.200s | Diferença: 154.00
-Pico 10: Frame 659 | Timestamp: 13.200s | Diferença: 77.00
+Informações de Resolução:
+Resolução original: 1920x1080
+Resolução processada: 960x540
+Redimensionado: Sim
+
+Configurações de Detecção:
+Média das diferenças: 78.84
+Diferença máxima encontrada: 166.00
+Threshold (75% do máximo): 143.59
+Intervalo mínimo entre picos: 1.0s
+
+Total de picos detectados: 5
+--------------------------------------
+Pico 1: Frame 72 | Timestamp: 2.433s | Diferença: 152.00 (91.6% do máximo)
+Pico 2: Frame 395 | Timestamp: 13.197s | Diferença: 145.00 (87.3% do máximo)
+Pico 3: Frame 428 | Timestamp: 14.296s | Diferença: 145.00 (87.3% do máximo)
+Pico 4: Frame 460 | Timestamp: 15.363s | Diferença: 148.00 (89.2% do máximo)
+Pico 5: Frame 668 | Timestamp: 22.294s | Diferença: 149.00 (89.8% do máximo)
 
 Análise de Frequência:
 ---------------------
-Intervalo 1: 3.400s | Frequência: 0.294Hz
-Intervalo 2: 1.960s | Frequência: 0.510Hz
-Intervalo 3: 1.020s | Frequência: 0.980Hz
-Intervalo 4: 1.060s | Frequência: 0.943Hz
-Intervalo 5: 1.020s | Frequência: 0.980Hz
-Intervalo 6: 1.000s | Frequência: 1.000Hz
-Intervalo 7: 1.060s | Frequência: 0.943Hz
-Intervalo 8: 1.420s | Frequência: 0.704Hz
-Intervalo 9: 1.000s | Frequência: 1.000Hz
+Intervalo 1: 10.764s | Frequência: 0.093Hz
+Intervalo 2: 1.100s | Frequência: 0.909Hz
+Intervalo 3: 1.066s | Frequência: 0.938Hz
+Intervalo 4: 6.932s | Frequência: 0.144Hz
 
-Frequência média: 0.817Hz
-Frequência mínima: 0.294Hz
-Frequência máxima: 1.000Hz
+Frequência média: 0.521Hz
+Frequência mínima: 0.093Hz
+Frequência máxima: 0.938Hz
