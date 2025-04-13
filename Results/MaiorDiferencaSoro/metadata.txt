@@ -1,0 +1,12 @@
+Top 10 frames com maior diferença:
+---------------------------------
+Rank 1: Frame 182 | Timestamp: 3.66s | Diferença: 158
+Rank 2: Frame 609 | Timestamp: 12.20s | Diferença: 154
+Rank 3: Frame 603 | Timestamp: 12.08s | Diferença: 152
+Rank 4: Frame 602 | Timestamp: 12.06s | Diferença: 134
+Rank 5: Frame 604 | Timestamp: 12.10s | Diferença: 133
+Rank 6: Frame 601 | Timestamp: 12.04s | Diferença: 116
+Rank 7: Frame 181 | Timestamp: 3.64s | Diferença: 109
+Rank 8: Frame 607 | Timestamp: 12.16s | Diferença: 107
+Rank 9: Frame 606 | Timestamp: 12.14s | Diferença: 105
+Rank 10: Frame 180 | Timestamp: 3.62s | Diferença: 101
