@@ -1,10 +1,8 @@
 import numpy as np
 import cv2
 import os
-import heapq
 import csv
 import time
-from collections import deque
 
 def inRange(cordinates, limits):
     x, y = cordinates
@@ -12,17 +10,23 @@ def inRange(cordinates, limits):
     return 0 <= x and x < X_Limit and 0 <= y and y < Y_Limit
 
 def calculate_frame_difference(prev_frame, curr_frame):
-    """Calcula a diferença máxima entre dois frames"""
     diff = cv2.absdiff(prev_frame, curr_frame)
-    return np.max(diff)
+    return np.max(diff) if np.any(diff) else 0
 
-def optical_flow(old_frame, new_frame, window_size, min_quality=0.01):
+def optical_flow(old_frame, new_frame, window_size, min_quality=0.01, margin_ratio=0.1):
+    height, width = old_frame.shape
+    margin_x = int(width * margin_ratio)
+    margin_y = int(height * margin_ratio)
+    
+    mask = np.zeros_like(old_frame)
+    mask[margin_y:-margin_y, margin_x:-margin_x] = 255
+    masked_frame = cv2.bitwise_and(old_frame, mask)
+
     max_corners = 10000
     min_distance = 0.1
-    feature_list = cv2.goodFeaturesToTrack(old_frame, max_corners, min_quality, min_distance)
+    feature_list = cv2.goodFeaturesToTrack(masked_frame, max_corners, min_quality, min_distance)
 
     w = int(window_size/2)
-
     old_frame = old_frame / 255
     new_frame = new_frame / 255
 
@@ -42,7 +46,7 @@ def optical_flow(old_frame, new_frame, window_size, min_quality=0.01):
             j, i = feature.ravel()
             i, j = int(i), int(j)
 
-            if i-w >= 0 and i+w+1 <= old_frame.shape[0] and j-w >= 0 and j+w+1 <= old_frame.shape[1]:
+            if i-w >= margin_y and i+w+1 <= old_frame.shape[0]-margin_y and j-w >= margin_x and j+w+1 <= old_frame.shape[1]-margin_x:
                 I_x = fx[i-w:i+w+1, j-w:j+w+1].flatten()
                 I_y = fy[i-w:i+w+1, j-w:j+w+1].flatten()
                 I_t = ft[i-w:i+w+1, j-w:j+w+1].flatten()
@@ -61,56 +65,87 @@ def optical_flow(old_frame, new_frame, window_size, min_quality=0.01):
 
     return (u, v)
 
-def resize_if_large(frame, max_resolution=1000):
-    """Redimensiona o frame se for maior que max_resolution"""
+def draw_flow(frame, flow, margin_ratio):
     height, width = frame.shape[:2]
-    if height > max_resolution or width > max_resolution:
-        new_height = int(height / 2)
-        new_width = int(width / 2)
-        return cv2.resize(frame, (new_width, new_height))
+    margin_x = int(width * margin_ratio)
+    margin_y = int(height * margin_ratio)
+    
+    for i in range(margin_y, height - margin_y, 5):
+        for j in range(margin_x, width - margin_x, 5):
+            if abs(flow[0][i,j]) > 0.1 or abs(flow[1][i,j]) > 0.1:
+                start = (j, i)
+                end = (int(j + 10 * flow[0][i,j]), int(i + 10 * flow[1][i,j]))
+                if inRange(end, (width, height)):
+                    cv2.arrowedLine(frame, start, end, (0, 255, 0), 2, tipLength=0.3)
+    
+    # Desenhar retângulo da área ativa
+    cv2.rectangle(frame, 
+                 (margin_x, margin_y), 
+                 (width - margin_x, height - margin_y),
+                 (0, 0, 255), 2)
     return frame
 
-def process_video(input_path, output_path, window_size=3, min_quality=0.01, peak_threshold_ratio=0.865):
-    start_time = time.time()
+def resize_if_large(frame, max_resolution=1000):
+    height, width = frame.shape[:2]
+    if height > max_resolution or width > max_resolution:
+        return cv2.resize(frame, (int(width/2), int(height/2)))
+    return frame
+
+def select_peaks(potential_peaks, threshold, min_interval):
+    if not potential_peaks:
+        return []
     
-    # Create output directories
+    potential_peaks.sort(key=lambda x: x[2])  # Ordena por timestamp
+    selected = []
+    last_peak_time = -min_interval
+    
+    for peak in potential_peaks:
+        diff, frame_num, timestamp, frame = peak
+        if diff >= threshold and (timestamp - last_peak_time) >= min_interval:
+            selected.append(peak)
+            last_peak_time = timestamp
+    
+    return selected
+
+def calculate_time_stats(timestamps):
+    if len(timestamps) < 2:
+        return 0, 0
+    
+    intervals = []
+    for i in range(1, len(timestamps)):
+        intervals.append(timestamps[i] - timestamps[i-1])
+    
+    avg_interval = np.mean(intervals)
+    avg_frequency = 1.0 / avg_interval if avg_interval > 0 else 0
+    
+    return avg_interval, avg_frequency
+
+def process_video(input_path, output_path, window_size=3, min_quality=0.01, 
+                 peak_threshold_ratio=0.75, margin_ratio=0.1, min_peak_interval=1.0):
+    
+    start_time = time.time()
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     diff_frames_dir = "./Results/MaiorDiferencaSoro"
     os.makedirs(diff_frames_dir, exist_ok=True)
     
-    # Data structures
     all_diffs = []
     potential_peaks = []
-    min_peak_interval = 1  # Em segundos
     
-    # Open video file
     cap = cv2.VideoCapture(input_path)
-    
-    # Get original video properties
     original_fps = cap.get(cv2.CAP_PROP_FPS)
     original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    # Check if we need to resize
     need_resize = original_height > 1000 or original_width > 1000
-    if need_resize:
-        width = int(original_width / 2)
-        height = int(original_height / 2)
-    else:
-        width = original_width
-        height = original_height
+    width = int(original_width/2) if need_resize else original_width
+    height = int(original_height/2) if need_resize else original_height
     
-    # Reduce speed by half
-    new_fps = original_fps / 2
-    
-    # Video writer for optical flow
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, new_fps, (width, height))
+    out = cv2.VideoWriter(output_path, fourcc, original_fps/2, (width, height))
     
-    # Read first frame
     ret, prev_frame = cap.read()
     if not ret:
-        print("Error reading video file")
+        print("Erro ao ler vídeo")
         return
     
     if need_resize:
@@ -126,176 +161,99 @@ def process_video(input_path, output_path, window_size=3, min_quality=0.01, peak
         if need_resize:
             curr_frame = resize_if_large(curr_frame)
         curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
-        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0  # in seconds
+        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)/1000.0
         
-        # Calculate frame difference
-        diff = calculate_frame_difference(prev_gray, curr_gray)
+        margin_x = int(width * margin_ratio)
+        margin_y = int(height * margin_ratio)
+        mask = np.zeros_like(prev_gray)
+        mask[margin_y:-margin_y, margin_x:-margin_x] = 255
         
-        # Store all differences
+        diff = calculate_frame_difference(
+            cv2.bitwise_and(prev_gray, mask),
+            cv2.bitwise_and(curr_gray, mask))
+        
         all_diffs.append((frame_number, timestamp, diff))
         
-        # Consider as potential peak
-        potential_peaks.append((diff, frame_number, timestamp, curr_frame.copy()))
+        # Calcular optical flow antes de adicionar aos picos
+        u, v = optical_flow(prev_gray, curr_gray, window_size, min_quality, margin_ratio)
+        flow_frame = draw_flow(curr_frame.copy(), (u, v), margin_ratio)
+        potential_peaks.append((diff, frame_number, timestamp, flow_frame.copy()))
         
-        # Calculate optical flow
-        u, v = optical_flow(prev_gray, curr_gray, window_size, min_quality)
-        
-        # Draw optical flow on frame
-        flow_frame = curr_frame.copy()
-        for i in range(0, curr_gray.shape[0], 5):
-            for j in range(0, curr_gray.shape[1], 5):
-                if abs(u[i,j]) > 0.1 or abs(v[i,j]) > 0.1:
-                    start_point = (j, i)
-                    end_point = (int(j + 10 * u[i,j]), int(i + 10 * v[i,j]))
-                    if inRange(end_point, (width, height)):
-                        cv2.arrowedLine(flow_frame, start_point, end_point, 
-                                       (0, 255, 0), 2, tipLength=0.3)
-        
-        # Write each frame twice to halve the speed
         out.write(flow_frame)
         out.write(flow_frame)
-        
-        # Update previous frame
         prev_gray = curr_gray.copy()
         frame_number += 1
     
-    # Release video resources
     cap.release()
     out.release()
     cv2.destroyAllWindows()
     
-    # Calculate maximum difference and threshold
-    max_difference = max([d[0] for d in potential_peaks]) if potential_peaks else 0
-    threshold = max_difference * peak_threshold_ratio
+    max_diff = max([p[0] for p in potential_peaks]) if potential_peaks else 0
+    threshold = max_diff * peak_threshold_ratio
+    selected_peaks = select_peaks(potential_peaks, threshold, min_peak_interval)
     
-    # Select peaks based on threshold
-    selected_peaks = select_peaks_by_threshold(potential_peaks, threshold, min_peak_interval)
+    # Calcular estatísticas de tempo
+    timestamps = [p[2] for p in selected_peaks]
+    avg_interval, avg_frequency = calculate_time_stats(timestamps)
     
-    # Calculate processing time
-    processing_time = time.time() - start_time
-    
-    # Get resolution information
-    original_resolution = (original_width, original_height)
-    processed_resolution = (width, height)
-    
-    # Save outputs
-    save_selected_peaks(selected_peaks, diff_frames_dir, processing_time, 
-                       original_resolution, processed_resolution, all_diffs, threshold, max_difference)
-    save_all_differences(all_diffs, diff_frames_dir)
+    save_results(selected_peaks, diff_frames_dir, time.time()-start_time,
+                (original_width, original_height), (width, height),
+                all_diffs, threshold, max_diff, margin_ratio, 
+                peak_threshold_ratio, min_peak_interval,
+                avg_interval, avg_frequency)
 
-def select_peaks_by_threshold(potential_peaks, threshold, min_interval):
-    """Seleciona picos que excedem o threshold com intervalo mínimo"""
-    # Sort by timestamp first
-    potential_peaks.sort(key=lambda x: x[2])
+def save_results(selected_peaks, output_dir, processing_time, 
+                original_res, processed_res, all_diffs,
+                threshold, max_diff, margin_ratio,
+                peak_threshold_ratio, min_peak_interval,
+                avg_interval, avg_frequency):
     
-    selected = []
-    last_peak_time = -min_interval - 1  # Garante que o primeiro pico válido será aceito
+    avg_diff = np.mean([d[2] for d in all_diffs]) if all_diffs else 0
     
-    for peak in potential_peaks:
-        diff, frame_num, timestamp, frame = peak
-        
-        # Verifica se excede o threshold e está fora do intervalo mínimo
-        if diff >= threshold and (timestamp - last_peak_time) >= min_interval:
-            selected.append(peak)
-            last_peak_time = timestamp
-    
-    return selected
-
-def calculate_frequencies(timestamps):
-    """Calcula as frequências baseadas nos intervalos entre picos"""
-    if len(timestamps) < 2:
-        return []
-    
-    time_diffs = []
-    for i in range(1, len(timestamps)):
-        time_diffs.append(timestamps[i] - timestamps[i-1])
-    
-    frequencies = [1.0 / diff for diff in time_diffs]
-    avg_frequency = np.mean(frequencies) if frequencies else 0
-    
-    return time_diffs, frequencies, avg_frequency
-
-def save_selected_peaks(selected_peaks, output_dir, processing_time, original_resolution, processed_resolution, all_diffs, threshold, max_difference):
-    """Salva os picos selecionados e calcula as frequências"""
-    # Calculate statistics
-    avg_difference = np.mean([diff[2] for diff in all_diffs]) if all_diffs else 0
-    
-    # Save peak frames
+    # Salvar frames dos picos com optical flow
     for i, peak in enumerate(selected_peaks, 1):
-        cv2.imwrite(os.path.join(output_dir, f"pico_{i}.png"), peak[3])
+        cv2.imwrite(f"{output_dir}/pico_{i}.png", peak[3])
     
-    # Create metadata
+    # Preparar metadados
     metadata = [
-        f"Processamento concluído em: {processing_time:.2f} segundos",
+        f"Processamento: {processing_time:.2f}s",
+        f"Resolução original: {original_res[0]}x{original_res[1]}",
+        f"Resolução processada: {processed_res[0]}x{processed_res[1]}",
+        f"Margem ignorada: {margin_ratio*100:.0f}%",
+        f"Média diferenças: {avg_diff:.2f}",
+        f"Diferença máxima: {max_diff:.2f}",
+        f"Threshold ({peak_threshold_ratio*100:.0f}%): {threshold:.2f}",
+        f"Intervalo mínimo: {min_peak_interval:.2f}s",
         "",
-        "Informações de Resolução:",
-        f"Resolução original: {original_resolution[0]}x{original_resolution[1]}",
-        f"Resolução processada: {processed_resolution[0]}x{processed_resolution[1]}",
-        f"Redimensionado: {'Sim' if original_resolution != processed_resolution else 'Não'}",
-        "",
-        "Configurações de Detecção:",
-        f"Média das diferenças: {avg_difference:.2f}",
-        f"Diferença máxima encontrada: {max_difference:.2f}",
-        f"Threshold (75% do máximo): {threshold:.2f}",
-        f"Intervalo mínimo entre picos: 1.0s",
-        "",
-        f"Total de picos detectados: {len(selected_peaks)}",
-        "--------------------------------------"
+        f"Total picos: {len(selected_peaks)}",
+        f"Tempo médio entre picos: {avg_interval:.3f}s",
+        f"Frequência média: {avg_frequency:.3f}Hz",
+        "---------------------------------",
+        "Picos detectados:"
     ]
     
     if selected_peaks:
-        # Sort peaks by timestamp
         selected_peaks.sort(key=lambda x: x[2])
-        
-        # Calculate frequencies
-        timestamps = [peak[2] for peak in selected_peaks]
-        time_diffs, frequencies, avg_frequency = calculate_frequencies(timestamps)
-        
         for i, peak in enumerate(selected_peaks, 1):
-            metadata.append(
-                f"Pico {i}: Frame {peak[1]} | Timestamp: {peak[2]:.3f}s | Diferença: {peak[0]:.2f} ({peak[0]/max_difference*100:.1f}% do máximo)"
-            )
-        
-        metadata.extend([
-            "",
-            "Análise de Frequência:",
-            "---------------------"
-        ])
-        
-        for i in range(len(time_diffs)):
-            metadata.append(
-                f"Intervalo {i+1}: {time_diffs[i]:.3f}s | Frequência: {frequencies[i]:.3f}Hz"
-            )
-        
-        metadata.extend([
-            "",
-            f"Frequência média: {avg_frequency:.3f}Hz",
-            f"Frequência mínima: {min(frequencies):.3f}Hz" if frequencies else "N/A",
-            f"Frequência máxima: {max(frequencies):.3f}Hz" if frequencies else "N/A"
-        ])
+            metadata.append(f"Pico {i}: Frame {peak[1]} | Tempo: {peak[2]:.3f}s | Dif: {peak[0]:.2f} ({peak[0]/max_diff*100:.1f}%)")
     else:
-        metadata.append("Nenhum pico significativo detectado (diferença ≥ 75% do valor máximo)")
+        metadata.append("Nenhum pico significativo detectado")
     
-    # Write metadata file
-    metadata_path = os.path.join(output_dir, "metadata.txt")
-    with open(metadata_path, 'w') as f:
+    # Salvar metadados
+    with open(f"{output_dir}/metadata.txt", 'w') as f:
         f.write("\n".join(metadata))
     
-    print(f"Picos salvos em: {output_dir}")
-    print(f"Metadados salvos em: {metadata_path}")
+    # Salvar diferenças em CSV
+    with open(f"{output_dir}/diferencas.csv", 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Frame', 'Tempo(s)', 'Diferença'])
+        writer.writerows(all_diffs)
 
-def save_all_differences(all_diffs, output_dir):
-    """Salva todas as diferenças em CSV"""
-    csv_path = os.path.join(output_dir, "diferencas_maximas.csv")
-    with open(csv_path, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['Frame', 'Timestamp (s)', 'Diferença Máxima'])
-        for frame_num, timestamp, diff in all_diffs:
-            writer.writerow([frame_num, f"{timestamp:.3f}", f"{diff:.2f}"])
-    
-    print(f"CSV com diferenças salvo em: {csv_path}")
-
-# Process the video
-input_video = "./Inputs/soro.mp4"
-output_video = "./Results/fluxosoro.mp4"
-process_video(input_video, output_video)
+if __name__ == "__main__":
+    process_video(
+        input_path="./Inputs/soro.mp4",
+        output_path="./Results/fluxosoro.mp4",
+        margin_ratio=0.25,
+        peak_threshold_ratio=0.85,
+        min_peak_interval=3.0
+    )

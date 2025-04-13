@@ -1,31 +1,20 @@
-Processamento concluído em: 138.38 segundos
-
-Informações de Resolução:
+Processamento: 117.75s
 Resolução original: 1920x1080
 Resolução processada: 960x540
-Redimensionado: Sim
+Margem ignorada: 25%
+Média diferenças: 79.34
+Diferença máxima: 161.00
+Threshold (85%): 136.85
+Intervalo mínimo: 3.00s
 
-Configurações de Detecção:
-Média das diferenças: 78.84
-Diferença máxima encontrada: 166.00
-Threshold (75% do máximo): 143.59
-Intervalo mínimo entre picos: 1.0s
-
-Total de picos detectados: 5
---------------------------------------
-Pico 1: Frame 72 | Timestamp: 2.433s | Diferença: 152.00 (91.6% do máximo)
-Pico 2: Frame 395 | Timestamp: 13.197s | Diferença: 145.00 (87.3% do máximo)
-Pico 3: Frame 428 | Timestamp: 14.296s | Diferença: 145.00 (87.3% do máximo)
-Pico 4: Frame 460 | Timestamp: 15.363s | Diferença: 148.00 (89.2% do máximo)
-Pico 5: Frame 668 | Timestamp: 22.294s | Diferença: 149.00 (89.8% do máximo)
-
-Análise de Frequência:
----------------------
-Intervalo 1: 10.764s | Frequência: 0.093Hz
-Intervalo 2: 1.100s | Frequência: 0.909Hz
-Intervalo 3: 1.066s | Frequência: 0.938Hz
-Intervalo 4: 6.932s | Frequência: 0.144Hz
-
-Frequência média: 0.521Hz
-Frequência mínima: 0.093Hz
-Frequência máxima: 0.938Hz
+Total picos: 6
+Tempo médio entre picos: 5.219s
+Frequência média: 0.192Hz
+---------------------------------
+Picos detectados:
+Pico 1: Frame 19 | Tempo: 0.666s | Dif: 143.00 (88.8%)
+Pico 2: Frame 111 | Tempo: 3.732s | Dif: 137.00 (85.1%)
+Pico 3: Frame 316 | Tempo: 10.564s | Dif: 138.00 (85.7%)
+Pico 4: Frame 492 | Tempo: 16.429s | Dif: 138.00 (85.7%)
+Pico 5: Frame 609 | Tempo: 20.328s | Dif: 139.00 (86.3%)
+Pico 6: Frame 801 | Tempo: 26.760s | Dif: 139.00 (86.3%)
