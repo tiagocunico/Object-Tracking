@@ -1,0 +1,21 @@
+=== RELATÓRIO DE ANÁLISE DE FLUXO ÓPTICO ===
+
+Arquivo analisado: ./Results/flow_analysis.csv
+Total de picos detectados: 3
+Tempo médio entre picos: 9.24 segundos
+
+Detalhes dos picos:
+Frame   | Tempo (s) | Magnitude
+--------|-----------|----------
+   203  |    6.77  |    29.98
+   479  |   15.98  |    10.77
+   757  |   25.26  |    12.11
+
+Parâmetros utilizados:
+Prominência mínima: 5
+Distância mínima entre picos: 10 frames
+
+Estatísticas dos intervalos:
+Menor intervalo: 9.21 s
+Maior intervalo: 9.28 s
+Desvio padrão: 0.03 s

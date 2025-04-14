@@ -3,8 +3,32 @@ import numpy as np
 import csv
 from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
+import os
 
-def resize_video(input_path, output_path, new_width=640, new_height=480):
+def create_output_directory(video_name):
+    """Cria um diretório de resultados com o nome do vídeo e retorna os caminhos completos"""
+    # Cria o diretório principal 'results' se não existir
+    if not os.path.exists('./Results'):
+        os.makedirs('./Results')
+    
+    # Cria o diretório específico para este vídeo
+    video_dir = f'./Results/{video_name}'
+    if not os.path.exists(video_dir):
+        os.makedirs(video_dir)
+    
+    # Define os caminhos completos para os arquivos de saída
+    paths = {
+        'input_video': f'./Inputs/{video_name}.mp4',
+        'resized_video': f'{video_dir}/{video_name}_resized.mp4',
+        'optical_flow_video': f'{video_dir}/{video_name}_optical_flow.mp4',
+        'csv_output_path': f'{video_dir}/{video_name}_flow_analysis.csv',
+        'output_txt': f'{video_dir}/{video_name}_flow_peaks_report.txt',
+        'output_plot': f'{video_dir}/{video_name}_flow_plot.png'
+    }
+    
+    return paths
+
+def resize_video(input_path, output_path, new_width=1066, new_height=600):
     # Abre o vídeo de entrada
     cap = cv2.VideoCapture(input_path)
     
@@ -144,7 +168,6 @@ def calculate_optical_flow(input_video, output_video, csv_output_path=None):
     
     return True
 
-
 def analyze_flow_peaks(csv_path, txt_output_path, plot_output_path=None, prominence=5, distance=10):
     """
     Analisa o CSV de fluxo óptico, gera relatório TXT e gráfico dos picos.
@@ -260,35 +283,32 @@ def analyze_flow_peaks(csv_path, txt_output_path, plot_output_path=None, promine
     
     return results
 
+# Nome do vídeo (sem extensão)
+video_name = "Aquario2"
 
-
-# Caminhos dos arquivos
-input_video = "./Inputs/soro.mp4"
-resized_video = "./Results/fluxosoro.mp4"
-optical_flow_video = "./Results/fluxosoro_optical_flow.mp4"
-csv_output_path = "./Results/flow_analysis.csv"
-output_txt = "./Results/flow_peaks_report.txt"
-output_plot = "./Results/flow_plot.png"  
+# Cria a estrutura de diretórios e obtém os caminhos
+paths = create_output_directory(video_name)
 
 # Processamento do vídeo
-success_resize = resize_video(input_video, resized_video)
+success_resize = resize_video(paths['input_video'], paths['resized_video'])
 
 if success_resize:
     print("Vídeo redimensionado com sucesso")
-    success_flow = calculate_optical_flow(resized_video, optical_flow_video, csv_output_path)
+    success_flow = calculate_optical_flow(paths['resized_video'], paths['optical_flow_video'], paths['csv_output_path'])
     
     if success_flow:
-        print(f"Fluxo óptico calculado e salvo em {optical_flow_video}")
-        print(f"Dados de fluxo salvos em {csv_output_path}")
+        print(f"Fluxo óptico calculado e salvo em {paths['optical_flow_video']}")
+        print(f"Dados de fluxo salvos em {paths['csv_output_path']}")
         
         analysis_results = analyze_flow_peaks(
-            csv_output_path,
-            output_txt,
-            output_plot,  # Novo parâmetro
+            paths['csv_output_path'],
+            paths['output_txt'],
+            paths['output_plot'],
             prominence=5,
             distance=10
         )
-        print(f"Análise concluída. Relatório salvo em: {output_txt}")
+        print(f"Análise concluída. Relatório salvo em: {paths['output_txt']}")
+        print(f"Gráfico salvo em: {paths['output_plot']}")
         print(f"Total de picos detectados: {analysis_results['total_peaks']}")
         print(f"Tempo médio entre picos: {analysis_results['average_interval']:.2f} segundos")
         
