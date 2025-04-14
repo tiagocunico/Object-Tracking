@@ -9,9 +9,22 @@ def inRange(cordinates, limits):
     X_Limit, Y_Limit = limits
     return 0 <= x and x < X_Limit and 0 <= y and y < Y_Limit
 
-def calculate_frame_difference(prev_frame, curr_frame):
-    diff = cv2.absdiff(prev_frame, curr_frame)
-    return np.max(diff) if np.any(diff) else 0
+def calculate_flow_magnitude(flow, margin_ratio, frame_shape):
+    """Calcula a magnitude do maior vetor de flow na área central"""
+    height, width = frame_shape
+    margin_x = int(width * margin_ratio)
+    margin_y = int(height * margin_ratio)
+    
+    max_magnitude = 0
+    
+    for i in range(margin_y, height - margin_y, 5):
+        for j in range(margin_x, width - margin_x, 5):
+            if abs(flow[0][i,j]) > 0.1 or abs(flow[1][i,j]) > 0.1:
+                magnitude = np.sqrt(flow[0][i,j]**2 + flow[1][i,j]**2)
+                if magnitude > max_magnitude:
+                    max_magnitude = magnitude
+    
+    return max_magnitude
 
 def optical_flow(old_frame, new_frame, window_size, min_quality=0.01, margin_ratio=0.1):
     height, width = old_frame.shape
@@ -65,24 +78,51 @@ def optical_flow(old_frame, new_frame, window_size, min_quality=0.01, margin_rat
 
     return (u, v)
 
-def draw_flow(frame, flow, margin_ratio):
+def draw_flow(frame, flow, margin_ratio, timestamp=None, flow_value=None):
     height, width = frame.shape[:2]
     margin_x = int(width * margin_ratio)
     margin_y = int(height * margin_ratio)
     
-    for i in range(margin_y, height - margin_y, 5):
-        for j in range(margin_x, width - margin_x, 5):
+    max_magnitude = 0
+    max_point = None
+    
+    # Fator de escala 2x maior para os vetores
+    vector_scale = 30  # Antes era 15
+    
+    # Primeira passada: encontrar o vetor máximo
+    for i in range(margin_y, height - margin_y, 8):
+        for j in range(margin_x, width - margin_x, 8):
+            if abs(flow[0][i,j]) > 0.1 or abs(flow[1][i,j]) > 0.1:
+                magnitude = np.sqrt(flow[0][i,j]**2 + flow[1][i,j]**2)
+                if magnitude > max_magnitude:
+                    max_magnitude = magnitude
+                    max_point = (i, j)
+    
+    # Segunda passada: desenhar todos os vetores (2x maiores)
+    for i in range(margin_y, height - margin_y, 8):
+        for j in range(margin_x, width - margin_x, 8):
             if abs(flow[0][i,j]) > 0.1 or abs(flow[1][i,j]) > 0.1:
                 start = (j, i)
-                end = (int(j + 10 * flow[0][i,j]), int(i + 10 * flow[1][i,j]))
+                end = (int(j + vector_scale * flow[0][i,j]), int(i + vector_scale * flow[1][i,j]))
                 if inRange(end, (width, height)):
-                    cv2.arrowedLine(frame, start, end, (0, 255, 0), 2, tipLength=0.3)
+                    if (i, j) == max_point:
+                        cv2.arrowedLine(frame, start, end, (0, 0, 255), 2, tipLength=0.3)  # Vermelho
+                    else:
+                        cv2.arrowedLine(frame, start, end, (0, 255, 0), 1, tipLength=0.2)  # Verde
     
     # Desenhar retângulo da área ativa
     cv2.rectangle(frame, 
                  (margin_x, margin_y), 
                  (width - margin_x, height - margin_y),
-                 (0, 0, 255), 2)
+                 (0, 255, 255), 2)
+    
+    # Adicionar informações textuais
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    if flow_value is not None:
+        cv2.putText(frame, f"Flow: {flow_value:.1f}", (width - 150, 30), font, 0.7, (255, 255, 255), 2)
+    if timestamp is not None:
+        cv2.putText(frame, f"Time: {timestamp:.2f}s", (width - 150, 60), font, 0.7, (255, 255, 255), 2)
+    
     return frame
 
 def resize_if_large(frame, max_resolution=1000):
@@ -91,21 +131,34 @@ def resize_if_large(frame, max_resolution=1000):
         return cv2.resize(frame, (int(width/2), int(height/2)))
     return frame
 
-def select_peaks(potential_peaks, threshold, min_interval):
+def select_peaks(potential_peaks, threshold_ratio, min_interval, avg_flow):
+    """Seleciona picos válidos, ignorando extremos (8x acima da média)"""
     if not potential_peaks:
-        return []
+        return [], 0
     
-    potential_peaks.sort(key=lambda x: x[2])  # Ordena por timestamp
+    # 1. Filtrar picos extremos
+    valid_peaks = [peak for peak in potential_peaks if peak[0] < avg_flow * 8]
+    
+    if not valid_peaks:
+        return [], 0
+    
+    # 2. Encontrar o novo máximo válido (não necessariamente o mesmo do vídeo)
+    valid_peaks_sorted = sorted(valid_peaks, key=lambda x: -x[0])
+    max_valid_flow = valid_peaks_sorted[0][0]
+    effective_threshold = max_valid_flow * threshold_ratio
+    
+    # 3. Selecionar picos que passam no threshold, respeitando o intervalo mínimo
     selected = []
     last_peak_time = -min_interval
     
-    for peak in potential_peaks:
-        diff, frame_num, timestamp, frame = peak
-        if diff >= threshold and (timestamp - last_peak_time) >= min_interval:
+    for peak in sorted(valid_peaks, key=lambda x: x[2]):  # Ordenar por tempo
+        flow, frame_num, timestamp, frame = peak
+        
+        if flow >= effective_threshold and (timestamp - last_peak_time) >= min_interval:
             selected.append(peak)
             last_peak_time = timestamp
     
-    return selected
+    return selected, max_valid_flow
 
 def calculate_time_stats(timestamps):
     if len(timestamps) < 2:
@@ -125,10 +178,10 @@ def process_video(input_path, output_path, window_size=3, min_quality=0.01,
     
     start_time = time.time()
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    diff_frames_dir = "./Results/MaiorDiferencaSoro"
+    diff_frames_dir = "./Results/MaiorDiferencaFlow"
     os.makedirs(diff_frames_dir, exist_ok=True)
     
-    all_diffs = []
+    all_flows = []
     potential_peaks = []
     
     cap = cv2.VideoCapture(input_path)
@@ -163,24 +216,21 @@ def process_video(input_path, output_path, window_size=3, min_quality=0.01,
         curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
         timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)/1000.0
         
-        margin_x = int(width * margin_ratio)
-        margin_y = int(height * margin_ratio)
-        mask = np.zeros_like(prev_gray)
-        mask[margin_y:-margin_y, margin_x:-margin_x] = 255
-        
-        diff = calculate_frame_difference(
-            cv2.bitwise_and(prev_gray, mask),
-            cv2.bitwise_and(curr_gray, mask))
-        
-        all_diffs.append((frame_number, timestamp, diff))
-        
-        # Calcular optical flow antes de adicionar aos picos
+        # Calcular optical flow
         u, v = optical_flow(prev_gray, curr_gray, window_size, min_quality, margin_ratio)
-        flow_frame = draw_flow(curr_frame.copy(), (u, v), margin_ratio)
-        potential_peaks.append((diff, frame_number, timestamp, flow_frame.copy()))
         
+        # Usar a magnitude do maior vetor como medida
+        max_flow = calculate_flow_magnitude((u, v), margin_ratio, prev_gray.shape)
+        all_flows.append((frame_number, timestamp, max_flow))
+        
+        # Desenhar fluxo e informações no frame (vetores 2x maiores)
+        flow_frame = draw_flow(curr_frame.copy(), (u, v), margin_ratio, timestamp, max_flow)
+        potential_peaks.append((max_flow, frame_number, timestamp, flow_frame.copy()))
+        
+        # Escrever frame no vídeo de saída
         out.write(flow_frame)
-        out.write(flow_frame)
+        out.write(flow_frame)  # Escreve duas vezes para reduzir velocidade
+        
         prev_gray = curr_gray.copy()
         frame_number += 1
     
@@ -188,54 +238,75 @@ def process_video(input_path, output_path, window_size=3, min_quality=0.01,
     out.release()
     cv2.destroyAllWindows()
     
-    max_diff = max([p[0] for p in potential_peaks]) if potential_peaks else 0
-    threshold = max_diff * peak_threshold_ratio
-    selected_peaks = select_peaks(potential_peaks, threshold, min_peak_interval)
+    # Calcular média de flow (excluindo zeros)
+    non_zero_flows = [f[2] for f in all_flows if f[2] > 0]
+    avg_flow = np.mean(non_zero_flows) if non_zero_flows else 0
+    
+    # Selecionar picos válidos (ignorando extremos)
+    selected_peaks, max_valid_flow = select_peaks(potential_peaks, 
+                                                peak_threshold_ratio,
+                                                min_peak_interval, 
+                                                avg_flow)
     
     # Calcular estatísticas de tempo
     timestamps = [p[2] for p in selected_peaks]
     avg_interval, avg_frequency = calculate_time_stats(timestamps)
     
+    # Salvar resultados
     save_results(selected_peaks, diff_frames_dir, time.time()-start_time,
                 (original_width, original_height), (width, height),
-                all_diffs, threshold, max_diff, margin_ratio, 
+                all_flows, peak_threshold_ratio * max_valid_flow, 
+                max_valid_flow, avg_flow, margin_ratio, 
                 peak_threshold_ratio, min_peak_interval,
                 avg_interval, avg_frequency)
 
 def save_results(selected_peaks, output_dir, processing_time, 
-                original_res, processed_res, all_diffs,
-                threshold, max_diff, margin_ratio,
+                original_res, processed_res, all_flows,
+                threshold, max_flow, avg_flow, margin_ratio,
                 peak_threshold_ratio, min_peak_interval,
                 avg_interval, avg_frequency):
     
-    avg_diff = np.mean([d[2] for d in all_diffs]) if all_diffs else 0
-    
-    # Salvar frames dos picos com optical flow
+    # Salvar frames dos picos
     for i, peak in enumerate(selected_peaks, 1):
-        cv2.imwrite(f"{output_dir}/pico_{i}.png", peak[3])
+        flow, frame_num, timestamp, frame = peak
+        annotated_frame = frame.copy()
+        
+        # Adicionar informações textuais
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(annotated_frame, f"Pico {i}", (20, 30), font, 0.7, (255, 255, 255), 2)
+        cv2.putText(annotated_frame, f"Flow: {flow:.1f} ({flow/max_flow*100:.1f}%)", (20, 60), font, 0.7, (255, 255, 255), 2)
+        cv2.putText(annotated_frame, f"Time: {timestamp:.2f}s", (20, 90), font, 0.7, (255, 255, 255), 2)
+        cv2.putText(annotated_frame, f"Média: {avg_flow:.1f}", (20, 120), font, 0.7, (255, 255, 255), 2)
+        
+        cv2.imwrite(f"{output_dir}/pico_{i}.png", annotated_frame)
     
     # Preparar metadados
     metadata = [
-        f"Processamento: {processing_time:.2f}s",
+        f"=== Análise Baseada em Optical Flow ===",
+        f"Tempo processamento: {processing_time:.2f}s",
         f"Resolução original: {original_res[0]}x{original_res[1]}",
         f"Resolução processada: {processed_res[0]}x{processed_res[1]}",
-        f"Margem ignorada: {margin_ratio*100:.0f}%",
-        f"Média diferenças: {avg_diff:.2f}",
-        f"Diferença máxima: {max_diff:.2f}",
-        f"Threshold ({peak_threshold_ratio*100:.0f}%): {threshold:.2f}",
-        f"Intervalo mínimo: {min_peak_interval:.2f}s",
+        f"Margem ignorada: {margin_ratio*100:.0f}% das bordas",
         "",
-        f"Total picos: {len(selected_peaks)}",
+        f"Flow médio: {avg_flow:.1f}",
+        f"Flow máximo válido: {max_flow:.1f} (excluindo extremos)",
+        f"Threshold: {threshold:.1f} ({peak_threshold_ratio*100:.0f}% do máximo válido)",
+        f"Intervalo mínimo entre picos: {min_peak_interval:.2f}s",
+        f"Limite para picos extremos: {avg_flow*8:.1f} (8x a média)",
+        "",
+        f"Total picos detectados: {len(selected_peaks)}",
         f"Tempo médio entre picos: {avg_interval:.3f}s",
         f"Frequência média: {avg_frequency:.3f}Hz",
-        "---------------------------------",
-        "Picos detectados:"
+        "",
+        "=== Picos Detectados ==="
     ]
     
     if selected_peaks:
         selected_peaks.sort(key=lambda x: x[2])
         for i, peak in enumerate(selected_peaks, 1):
-            metadata.append(f"Pico {i}: Frame {peak[1]} | Tempo: {peak[2]:.3f}s | Dif: {peak[0]:.2f} ({peak[0]/max_diff*100:.1f}%)")
+            metadata.append(
+                f"Pico {i}: Frame {peak[1]} | Tempo: {peak[2]:.3f}s | Flow: {peak[0]:.1f} ({peak[0]/max_flow*100:.1f}%)"
+            )
     else:
         metadata.append("Nenhum pico significativo detectado")
     
@@ -243,11 +314,11 @@ def save_results(selected_peaks, output_dir, processing_time,
     with open(f"{output_dir}/metadata.txt", 'w') as f:
         f.write("\n".join(metadata))
     
-    # Salvar diferenças em CSV
-    with open(f"{output_dir}/diferencas.csv", 'w', newline='') as f:
+    # Salvar flows em CSV
+    with open(f"{output_dir}/flows.csv", 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Frame', 'Tempo(s)', 'Diferença'])
-        writer.writerows(all_diffs)
+        writer.writerow(['Frame', 'Tempo(s)', 'Flow'])
+        writer.writerows(all_flows)
 
 if __name__ == "__main__":
     process_video(

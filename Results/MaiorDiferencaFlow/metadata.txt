@@ -1,0 +1,19 @@
+=== Análise Baseada em Optical Flow ===
+Tempo processamento: 116.38s
+Resolução original: 1920x1080
+Resolução processada: 960x540
+Margem ignorada: 25% das bordas
+
+Flow médio: 1.8
+Flow máximo válido: 14.0 (excluindo extremos)
+Threshold: 11.9 (85% do máximo válido)
+Intervalo mínimo entre picos: 3.00s
+Limite para picos extremos: 14.0 (8x a média)
+
+Total picos detectados: 2
+Tempo médio entre picos: 12.330s
+Frequência média: 0.081Hz
+
+=== Picos Detectados ===
+Pico 1: Frame 112 | Tempo: 3.766s | Flow: 14.0 (100.0%)
+Pico 2: Frame 482 | Tempo: 16.096s | Flow: 12.1 (86.4%)
