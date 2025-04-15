@@ -66,7 +66,7 @@ def resize_video(input_path, output_path, new_width=1066, new_height=600):
 
 def calculate_optical_flow(input_video, output_video, csv_output_path=None):
     """
-    Calcula o fluxo óptico e salva dados em CSV se especificado.
+    Calcula o fluxo óptico usando SIFT para detecção de pontos e Lucas-Kanade para rastreamento.
     
     Args:
         input_video (str): Caminho do vídeo de entrada
@@ -93,28 +93,36 @@ def calculate_optical_flow(input_video, output_video, csv_output_path=None):
     if csv_output_path:
         csv_file = open(csv_output_path, 'w', newline='')
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['frame_number', 'timestamp_ms', 'max_flow_magnitude'])
+        csv_writer.writerow(['frame_number', 'timestamp_ms', 'max_flow_magnitude', 'num_keypoints'])
     
-    # Parâmetros para Lucas-Kanade (manter igual)
-    feature_params = dict(maxCorners=100,
-                        qualityLevel=0.3,
-                        minDistance=7,
-                        blockSize=7)
+    # Inicializa o SIFT
+    sift = cv2.SIFT_create(
+        nfeatures=0,           # Limita o número máximo de pontos
+        contrastThreshold=0.04, # Aumentado para filtrar pontos de baixo contraste
+        edgeThreshold=10,       # Aumentado para ignorar bordas muito próximas
+        sigma=1.6              # Suavização mais forte
+    )
     
-    lk_params = dict(winSize=(15, 15),
-                    maxLevel=2,
-                    criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+    # Parâmetros LK (ajustados para gotas)
+    lk_params = dict(
+        winSize=(15, 15),      # Janela maior para objetos suaves
+        maxLevel=3,            # Mais níveis piramidais
+        criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 20, 0.03)
+    )
     
-    # Processamento dos frames (manter a lógica principal)
+    # Lê o primeiro frame
     ret, old_frame = cap.read()
     if not ret:
         print("Erro ao ler o primeiro frame")
         return False
     
     old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
-    p0 = cv2.goodFeaturesToTrack(old_gray, mask=None, **feature_params)
-    mask = np.zeros_like(old_frame)
     
+    # Detecta keypoints com SIFT no primeiro frame
+    keypoints = sift.detect(old_gray, None)
+    p0 = cv2.KeyPoint_convert(keypoints).reshape(-1, 1, 2)
+    
+    mask = np.zeros_like(old_frame)
     frame_number = 0
     
     while True:
@@ -125,15 +133,18 @@ def calculate_optical_flow(input_video, output_video, csv_output_path=None):
         frame_number += 1
         timestamp_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
         max_magnitude = 0
+        num_keypoints = 0
         
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
         if p0 is not None and len(p0) > 0:
+            # Calcula o fluxo óptico
             p1, st, err = cv2.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
             
             if p1 is not None:
                 good_new = p1[st == 1]
                 good_old = p0[st == 1]
+                num_keypoints = len(good_new)
                 
                 for new, old in zip(good_new, good_old):
                     a, b = new.ravel()
@@ -151,13 +162,15 @@ def calculate_optical_flow(input_video, output_video, csv_output_path=None):
             img = cv2.add(frame, mask)
             out.write(img)
         else:
-            p0 = cv2.goodFeaturesToTrack(old_gray, mask=None, **feature_params)
+            # Se não há pontos para rastrear, detecta novos keypoints com SIFT
+            keypoints = sift.detect(frame_gray, None)
+            p0 = cv2.KeyPoint_convert(keypoints).reshape(-1, 1, 2)
             mask = np.zeros_like(old_frame)
             out.write(frame)
         
         # Escreve dados no CSV
         if csv_output_path:
-            csv_writer.writerow([frame_number, timestamp_ms, max_magnitude])
+            csv_writer.writerow([frame_number, timestamp_ms, max_magnitude, num_keypoints])
     
     # Liberação de recursos
     cap.release()
@@ -284,7 +297,7 @@ def analyze_flow_peaks(csv_path, txt_output_path, plot_output_path=None, promine
     return results
 
 # Nome do vídeo (sem extensão)
-video_name = "Aquario2"
+video_name = "SoroLinearPerto"
 
 # Cria a estrutura de diretórios e obtém os caminhos
 paths = create_output_directory(video_name)
