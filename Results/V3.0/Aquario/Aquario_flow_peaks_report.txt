@@ -1,0 +1,26 @@
+=== RELATÓRIO DE ANÁLISE DE FLUXO ÓPTICO ===
+
+Arquivo analisado: Aquario_flow_analysis.csv
+Total de picos detectados: 7
+Tempo médio entre picos: 3.43 segundos
+
+Detalhes dos picos:
+Frame   | Tempo (s) | Magnitude
+--------|-----------|----------
+65      | 2.17      | 6.34    
+88      | 2.93      | 7.55    
+362     | 12.06     | 21.74   
+388     | 12.93     | 4.38    
+452     | 15.06     | 3.50    
+661     | 22.03     | 17.32   
+682     | 22.73     | 5.57    
+
+
+Parâmetros utilizados para detecção de picos:
+Prominência mínima: 3.0
+Distância mínima entre picos: 15 frames
+
+Estatísticas dos intervalos entre picos:
+Menor intervalo: 0.70 s
+Maior intervalo: 9.13 s
+Desvio padrão: 3.36 s

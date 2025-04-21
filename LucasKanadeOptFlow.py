@@ -511,16 +511,17 @@ def analyze_flow_peaks(csv_path, txt_output_path, plot_output_path=None, promine
 if __name__ == "__main__":
 
     # --- Configurações do Vídeo e Caminhos ---
-    #SoroBase
-    #Aquario
+    #SoroBase 2 
+    #Aquario 3
     #Aquario2
-    #SoroLinearperto
-    #SoroLinearMedio
+    #SoroLinearperto 7
+    #SoroLinearMedio 7
+    #SoroNaoLinear 25
     #SoroMovendoCameraPerto
     #SoroMovendoCameraMedio
-    #SoroBalancando
+    #SoroBalancando 2
     #SoroLonge
-    VIDEO_NAME = "SoroMovendoCameraPerto" # <<< NOME DO SEU ARQUIVO DE VÍDEO na pasta ./Inputs (sem a extensão .mp4)
+    VIDEO_NAME = "Aquario2" # <<< NOME DO SEU ARQUIVO DE VÍDEO na pasta ./Inputs (sem a extensão .mp4)
     # Cria a estrutura de diretórios de saída e obtém todos os caminhos necessários
     paths = create_output_directory(VIDEO_NAME)
 
@@ -544,9 +545,9 @@ if __name__ == "__main__":
     # Parâmetros para goodFeaturesToTrack (Shi-Tomasi) na detecção de Features
     # Usados para encontrar pontos de interesse para rastrear. Ajuste para capturar features nas gotas.
     FEAT_MAX_CORNERS = 0 # Número máximo de cantos a serem detectados. Aumente para mais pontos.
-    FEAT_QUALITY_LEVEL = 0.01 # Limite mínimo de qualidade. Diminua para aceitar pontos mais fracos.
+    FEAT_QUALITY_LEVEL = 0.009 # Limite mínimo de qualidade. Diminua para aceitar pontos mais fracos.
     FEAT_MIN_DISTANCE = 5 # Distância mínima entre pontos. Aumente para espalhar os pontos.
-    FEAT_BLOCK_SIZE = 7 # Tamanho da vizinhança. Tamanhos maiores são menos sensíveis a ruído local.
+    FEAT_BLOCK_SIZE = 15 # Tamanho da vizinhança. Tamanhos maiores são menos sensíveis a ruído local.
 
     # Parâmetros para calcOpticalFlowPyrLK (Lucas-Kanade) no Rastreamento
     # Usados para rastrear os pontos detectados de um frame para o próximo.
@@ -559,7 +560,7 @@ if __name__ == "__main__":
 
     # Parâmetros para find_peaks da SciPy
     # Usados para identificar os eventos de "gota" ou movimento significativo nos dados de magnitude do fluxo.
-    PEAK_PROMINENCE = 5.0 # A altura relativa que um pico deve ter para ser considerado. Este é CRUCIAL para filtrar ruído e identificar gotas. Pode precisar ser ajustado significativamente (ex: de 1 a 20 ou mais).
+    PEAK_PROMINENCE = 3.0 # A altura relativa que um pico deve ter para ser considerado. Este é CRUCIAL para filtrar ruído e identificar gotas. Pode precisar ser ajustado significativamente (ex: de 1 a 20 ou mais).
     PEAK_DISTANCE = 15 # O número mínimo de frames entre dois picos detectados. Ajuda a não contar o mesmo evento várias vezes se ele gera vários picos próximos. Ajuste baseado na frequência das gotas.
 
     # --- Etapa 1: Redimensionar Vídeo ---

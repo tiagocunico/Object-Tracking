@@ -1,0 +1,21 @@
+=== RELATÓRIO DE ANÁLISE DE FLUXO ÓPTICO ===
+
+Arquivo analisado: SoroBase_flow_analysis.csv
+Total de picos detectados: 2
+Tempo médio entre picos: 8.42 segundos
+
+Detalhes dos picos:
+Frame   | Tempo (s) | Magnitude
+--------|-----------|----------
+184     | 3.68      | 19.68   
+605     | 12.10     | 27.79   
+
+
+Parâmetros utilizados para detecção de picos:
+Prominência mínima: 3.0
+Distância mínima entre picos: 15 frames
+
+Estatísticas dos intervalos entre picos:
+Menor intervalo: 8.42 s
+Maior intervalo: 8.42 s
+Desvio padrão: 0.00 s

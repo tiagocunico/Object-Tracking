@@ -1,0 +1,26 @@
+=== RELATÓRIO DE ANÁLISE DE FLUXO ÓPTICO ===
+
+Arquivo analisado: SoroLinearMedio_flow_analysis.csv
+Total de picos detectados: 7
+Tempo médio entre picos: 0.89 segundos
+
+Detalhes dos picos:
+Frame   | Tempo (s) | Magnitude
+--------|-----------|----------
+12      | 0.40      | 6.15    
+39      | 1.30      | 3.77    
+65      | 2.17      | 7.73    
+90      | 3.00      | 4.05    
+118     | 3.93      | 8.76    
+145     | 4.83      | 5.27    
+172     | 5.73      | 22.06   
+
+
+Parâmetros utilizados para detecção de picos:
+Prominência mínima: 3.0
+Distância mínima entre picos: 15 frames
+
+Estatísticas dos intervalos entre picos:
+Menor intervalo: 0.83 s
+Maior intervalo: 0.93 s
+Desvio padrão: 0.03 s
