@@ -513,7 +513,7 @@ if __name__ == "__main__":
     # --- Configurações do Vídeo e Caminhos ---
     #SoroBase 2 
     #Aquario 3
-    #Aquario2
+    #Aquario2 3
     #SoroLinearperto 7
     #SoroLinearMedio 7
     #SoroNaoLinear 25
@@ -521,7 +521,7 @@ if __name__ == "__main__":
     #SoroMovendoCameraMedio
     #SoroBalancando 2
     #SoroLonge
-    VIDEO_NAME = "Aquario2" # <<< NOME DO SEU ARQUIVO DE VÍDEO na pasta ./Inputs (sem a extensão .mp4)
+    VIDEO_NAME = "SoroLinearperto" # <<< NOME DO SEU ARQUIVO DE VÍDEO na pasta ./Inputs (sem a extensão .mp4)
     # Cria a estrutura de diretórios de saída e obtém todos os caminhos necessários
     paths = create_output_directory(VIDEO_NAME)
 
